@@ -209,8 +209,8 @@ const HomeTracker: React.FC = () => {
   const getAnalyticsData = () => {
     return people.map(person => ({
       person: person.name,
-      hoursHome: person.stats?.hoursHome72h || 0,
-      fullMark: 72 * 60 * 60 * 1000
+      hoursHome: person.stats?.hoursHome72h ? (person.stats.hoursHome72h / (1000 * 60 * 60)) : 0,
+      fullMark: 72
     }));
   };
 
@@ -463,13 +463,13 @@ const HomeTracker: React.FC = () => {
               ).person : 'N/A'}
             </p>
             <p className="text-sm text-gray-500">
-              {analyticsData.length > 0 ? formatMilliseconds(Math.max(...analyticsData.map(p => p.hoursHome))) : '0h 0m'}
+              {analyticsData.length > 0 ? formatMilliseconds(Math.max(...analyticsData.map(p => p.hoursHome)) * 1000 * 60 * 60) : '0h 0m'}
             </p>
           </div>
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-600 mb-2">Average Time</h3>
             <p className="text-2xl font-light text-gray-800">
-              {analyticsData.length > 0 ? formatMilliseconds(analyticsData.reduce((sum, p) => sum + p.hoursHome, 0) / analyticsData.length) : '0h 0m'}
+              {analyticsData.length > 0 ? formatMilliseconds(analyticsData.reduce((sum, p) => sum + p.hoursHome, 0) / analyticsData.length * 1000 * 60 * 60) : '0h 0m'}
             </p>
             <p className="text-sm text-gray-500">per person</p>
           </div>
