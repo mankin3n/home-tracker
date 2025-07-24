@@ -1,9 +1,6 @@
-cat > README.md << 'EOF'
 # 🏠 Home Tracker
 
 A beautiful, cozy web application to track who's currently home and analyze presence patterns over time. Built with React and TypeScript.
-
-![Home Tracker Preview](https://img.shields.io/badge/React-18+-blue?logo=react) ![TypeScript](https://img.shields.io/badge/TypeScript-5+-blue?logo=typescript) ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## ✨ Features
 
