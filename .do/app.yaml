@@ -1,0 +1,25 @@
+name: home-tracker
+services:
+- name: web
+  source_dir: /
+  github:
+    repo: your-username/home-tracker
+    branch: production
+  run_command: yarn start
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  build_command: yarn install && yarn build
+  http_port: 8080
+  health_check:
+    http_path: /health
+    initial_delay_seconds: 60
+    period_seconds: 10
+    timeout_seconds: 5
+    success_threshold: 1
+    failure_threshold: 3
+  envs:
+  - key: NODE_ENV
+    value: production
+  - key: PORT
+    value: "8080"
