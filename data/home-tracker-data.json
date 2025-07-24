@@ -1,0 +1,67 @@
+{
+  "people": [
+    {
+      "id": 1,
+      "name": "Julia",
+      "isHome": true
+    },
+    {
+      "id": 2,
+      "name": "Jossu",
+      "isHome": true
+    },
+    {
+      "id": 3,
+      "name": "Papu",
+      "isHome": false
+    },
+    {
+      "id": 4,
+      "name": "Cosmo",
+      "isHome": true
+    },
+    {
+      "id": 5,
+      "name": "Pepi",
+      "isHome": false
+    },
+    {
+      "id": 6,
+      "name": "Pauli",
+      "isHome": false
+    },
+    {
+      "id": 7,
+      "name": "Tomi",
+      "isHome": false
+    },
+    {
+      "id": 8,
+      "name": "Yoshi",
+      "isHome": false
+    }
+  ],
+  "homeHistory": {
+    "Julia": [
+      {
+        "timestamp": 1753356195100,
+        "isHome": true
+      }
+    ],
+    "Jossu": [
+      {
+        "timestamp": 1753356200311,
+        "isHome": true
+      }
+    ],
+    "Cosmo": [
+      {
+        "timestamp": 1753356209313,
+        "isHome": true
+      }
+    ]
+  },
+  "nextId": 9,
+  "sessionStartTime": 1753356188541,
+  "lastUpdated": "2025-07-24T11:23:29.313Z"
+}

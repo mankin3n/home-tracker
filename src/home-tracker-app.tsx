@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PlusCircle, Trash2, Edit3, BarChart3 } from 'lucide-react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts';
+import { io, Socket } from 'socket.io-client';
 
 interface Person {
   id: number;
@@ -13,66 +14,111 @@ interface HistoryEntry {
   isHome: boolean;
 }
 
+interface ServerData {
+  people: Person[];
+  homeHistory: Record<string, HistoryEntry[]>;
+  nextId: number;
+  sessionStartTime: number;
+  lastUpdated: string;
+}
+
 const HomeTracker: React.FC = () => {
   // Initialize logging
   useEffect(() => {
     console.log('🏠 Home Tracker App Starting...');
     console.log('📅 App started at:', new Date().toISOString());
     console.log('🌐 Environment:', process.env.NODE_ENV);
-    console.log('📱 User Agent:', navigator.userAgent);
-    console.log('🔧 React Version:', React.version);
   }, []);
 
   const [currentView, setCurrentView] = useState<'home' | 'edit' | 'analytics'>('home');
-  const [people, setPeople] = useState<Person[]>([
-    { id: 1, name: 'Julia', isHome: false },
-    { id: 2, name: 'Jossu', isHome: false },
-    { id: 3, name: 'Papu', isHome: false },
-    { id: 4, name: 'Cosmo', isHome: false },
-    { id: 5, name: 'Pepi', isHome: false },
-    { id: 6, name: 'Pauli', isHome: false },
-    { id: 7, name: 'Tomi', isHome: false },
-    { id: 8, name: 'Yoshi', isHome: false }
-  ]);
+  const [people, setPeople] = useState<Person[]>([]);
   const [newPersonName, setNewPersonName] = useState<string>('');
-  const [nextId, setNextId] = useState<number>(9);
   const [homeHistory, setHomeHistory] = useState<Record<string, HistoryEntry[]>>({});
-  const [sessionStartTime] = useState<number>(Date.now());
+  const [sessionStartTime, setSessionStartTime] = useState<number>(Date.now());
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const socketRef = useRef<Socket | null>(null);
 
-  // Log initial state
-  useEffect(() => {
-    console.log('👥 Initial people loaded:', people.length, 'people');
-    console.log('🏁 Session start time:', new Date(sessionStartTime).toISOString());
-  }, [people.length, sessionStartTime]);
-
-  // Track home status changes for analytics
-  useEffect(() => {
-    const now = Date.now();
-    
-    people.forEach(person => {
-      setHomeHistory(prev => {
-        const updatedHistory = { ...prev };
-        
-        if (!updatedHistory[person.name]) {
-          updatedHistory[person.name] = [];
-          console.log(`📝 Created history for ${person.name}`);
-        }
-        
-        const lastEntry = updatedHistory[person.name][updatedHistory[person.name].length - 1];
-        
-        // If status changed or this is the first entry
-        if (!lastEntry || lastEntry.isHome !== person.isHome) {
-          updatedHistory[person.name].push({
-            timestamp: now,
-            isHome: person.isHome
-          });
-          console.log(`🔄 Status change for ${person.name}: ${person.isHome ? 'HOME' : 'AWAY'} at ${new Date(now).toLocaleTimeString()}`);
-        }
-        
-        return updatedHistory;
+  // API helper functions
+  const apiCall = async (url: string, options: RequestInit = {}) => {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+        ...options,
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`❌ API call failed for ${url}:`, error);
+      throw error;
+    }
+  };
+
+  // Load initial data from server
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const data: ServerData = await apiCall('/api/data');
+      
+      setPeople(data.people);
+      setHomeHistory(data.homeHistory);
+      setSessionStartTime(data.sessionStartTime);
+      
+      console.log('📤 Loaded data from server:', data.people.length, 'people');
+      console.log('🏁 Session start time:', new Date(data.sessionStartTime).toISOString());
+    } catch (error) {
+      console.error('❌ Failed to load data from server:', error);
+      setError('Failed to load data from server');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Setup WebSocket connection and load initial data
+  useEffect(() => {
+    // Initialize WebSocket connection
+    socketRef.current = io();
+    
+    socketRef.current.on('connect', () => {
+      console.log('🔌 Connected to WebSocket server');
+      setError(null);
     });
-  }, [people.map(p => `${p.name}-${p.isHome}`).join(',')]);
+    
+    socketRef.current.on('dataUpdate', (serverData: ServerData) => {
+      console.log('📡 Received real-time data update');
+      setPeople(serverData.people);
+      setHomeHistory(serverData.homeHistory);
+      setSessionStartTime(serverData.sessionStartTime);
+      setLoading(false);
+    });
+    
+    socketRef.current.on('disconnect', () => {
+      console.log('🔌 Disconnected from WebSocket server');
+    });
+    
+    socketRef.current.on('connect_error', (error) => {
+      console.error('❌ WebSocket connection error:', error);
+      setError('Connection to server lost. Trying to reconnect...');
+      // Fallback to REST API if WebSocket fails
+      loadData();
+    });
+    
+    // Cleanup on unmount
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
 
   // Calculate actual hours spent at home since session start
   const calculateHomeHours = (personName: string): number => {
@@ -95,67 +141,85 @@ const HomeTracker: React.FC = () => {
     
     // Convert milliseconds to hours and cap at 72 for display
     const hours = Math.min(Math.round(totalHomeTime / (1000 * 60 * 60) * 10) / 10, 72);
-    console.log(`⏰ ${personName} has been home for ${hours} hours this session`);
     return hours;
   };
 
-  const togglePersonStatus = (personId: number): void => {
+  const togglePersonStatus = async (personId: number): Promise<void> => {
     const person = people.find(p => p.id === personId);
-    if (person) {
+    if (!person) return;
+
+    try {
       console.log(`🔄 Toggling ${person.name} from ${person.isHome ? 'HOME' : 'AWAY'} to ${!person.isHome ? 'HOME' : 'AWAY'}`);
-    }
-    
-    setPeople(prev => prev.map(person => 
-      person.id === personId ? { ...person, isHome: !person.isHome } : person
-    ));
-  };
-
-  const addPerson = (): void => {
-    if (newPersonName.trim()) {
-      console.log(`➕ Adding new person: ${newPersonName.trim()} (ID: ${nextId})`);
-      setPeople(prev => [...prev, { 
-        id: nextId, 
-        name: newPersonName.trim(), 
-        isHome: false 
-      }]);
-      setNextId(prev => prev + 1);
-      setNewPersonName('');
-    } else {
-      console.warn('❌ Cannot add person with empty name');
-    }
-  };
-
-  const removePerson = (personId: number): void => {
-    const personToRemove = people.find(p => p.id === personId);
-    if (personToRemove) {
-      console.log(`➖ Removing person: ${personToRemove.name} (ID: ${personId})`);
-      // Remove from history as well
-      setHomeHistory(prev => {
-        const updatedHistory = { ...prev };
-        delete updatedHistory[personToRemove.name];
-        console.log(`🗑️ Removed history for ${personToRemove.name}`);
-        return updatedHistory;
+      
+      const result = await apiCall(`/api/people/${personId}/toggle`, {
+        method: 'POST',
       });
+
+      if (result.success) {
+        console.log('✅', result.message);
+        // No need to reload data - WebSocket will send real-time update
+      }
+    } catch (error) {
+      console.error('❌ Failed to toggle person status:', error);
+      setError('Failed to update person status');
     }
-    setPeople(prev => prev.filter(person => person.id !== personId));
+  };
+
+  const addPerson = async (): Promise<void> => {
+    if (!newPersonName.trim()) {
+      console.warn('❌ Cannot add person with empty name');
+      return;
+    }
+
+    try {
+      console.log(`➕ Adding new person: ${newPersonName.trim()}`);
+      
+      const result = await apiCall('/api/people', {
+        method: 'POST',
+        body: JSON.stringify({ name: newPersonName.trim() }),
+      });
+
+      if (result.success) {
+        setNewPersonName('');
+        console.log('✅', result.message);
+        // No need to reload data - WebSocket will send real-time update
+      }
+    } catch (error) {
+      console.error('❌ Failed to add person:', error);
+      setError('Failed to add person');
+    }
+  };
+
+  const removePerson = async (personId: number): Promise<void> => {
+    const person = people.find(p => p.id === personId);
+    if (!person) return;
+
+    try {
+      console.log(`➖ Removing person: ${person.name} (ID: ${personId})`);
+      
+      const result = await apiCall(`/api/people/${personId}`, {
+        method: 'DELETE',
+      });
+
+      if (result.success) {
+        console.log('✅', result.message);
+        // No need to reload data - WebSocket will send real-time update
+      }
+    } catch (error) {
+      console.error('❌ Failed to remove person:', error);
+      setError('Failed to remove person');
+    }
   };
 
   const homeCount = people.filter(person => person.isHome).length;
 
-  // Log home count changes
-  useEffect(() => {
-    console.log(`🏠 Currently ${homeCount} people are home`);
-  }, [homeCount]);
-
   // Generate analytics data based on actual tracking
   const getAnalyticsData = () => {
-    const data = people.map(person => ({
+    return people.map(person => ({
       person: person.name,
       hoursHome: calculateHomeHours(person.name),
       fullMark: 72
     }));
-    console.log('📊 Analytics data generated:', data);
-    return data;
   };
 
   // Log view changes
@@ -164,30 +228,40 @@ const HomeTracker: React.FC = () => {
     setCurrentView(newView);
   };
 
-  // Error boundary logging
-  useEffect(() => {
-    const handleError = (event: ErrorEvent) => {
-      console.error('💥 JavaScript Error:', event.error);
-      console.error('📍 Error details:', {
-        message: event.message,
-        filename: event.filename,
-        lineno: event.lineno,
-        colno: event.colno
-      });
-    };
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br p-6 flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center">
+          <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
+            <h1 className="text-2xl font-light text-gray-800 mb-4">Loading Home Tracker...</h1>
+            <div className="animate-pulse bg-gray-200 h-4 rounded mb-4"></div>
+            <div className="animate-pulse bg-gray-200 h-4 rounded w-3/4 mx-auto"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      console.error('💥 Unhandled Promise Rejection:', event.reason);
-    };
-
-    window.addEventListener('error', handleError);
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
-
-    return () => {
-      window.removeEventListener('error', handleError);
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
-    };
-  }, []);
+  // Show error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br p-6 flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center">
+          <div className="bg-white rounded-2xl p-8 shadow-sm border border-red-200">
+            <h1 className="text-2xl font-light text-red-800 mb-4">Error</h1>
+            <p className="text-red-600 mb-4">{error}</p>
+            <button
+              onClick={loadData}
+              className="px-4 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (currentView === 'home') {
     return (
@@ -279,7 +353,7 @@ const HomeTracker: React.FC = () => {
 
           <div className="mt-8 text-center">
             <p className="text-gray-400 text-sm">
-              Tap the switches to update who's home
+              Tap the switches to update who's home • Real-time sync across all devices
             </p>
           </div>
         </div>
