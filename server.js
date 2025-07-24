@@ -279,12 +279,21 @@ app.get('/api/analytics', async (req, res) => {
     });
     
     console.log('📊 Generated analytics data');
-    
+
+    // Calculate average home time in hours
+    const totalHours = analyticsData.reduce((sum, p) => sum + p.hoursHome, 0);
+    const avgHours = analyticsData.length > 0 ? totalHours / analyticsData.length : 0;
+    const avgMinutes = Math.round(avgHours * 60 * 10) / 10; // rounded to 1 decimal
+
     res.json({
       success: true,
       analytics: analyticsData,
       sessionStartTime: data.sessionStartTime,
-      lastUpdated: data.lastUpdated
+      lastUpdated: data.lastUpdated,
+      averageHomeTime: {
+        hours: Math.round(avgHours * 10) / 10,
+        minutes: avgMinutes
+      }
     });
   } catch (error) {
     console.error('❌ Error generating analytics:', error);
