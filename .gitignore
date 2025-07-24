@@ -31,3 +31,4 @@ pnpm-lock.yaml
 
 # Deployment
 deployment-fix.md
+data/home-tracker-data.json
