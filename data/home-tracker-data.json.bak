@@ -1,0 +1,48 @@
+{
+  "people": [
+    {
+      "id": 1,
+      "name": "Julia",
+      "isHome": false
+    },
+    {
+      "id": 2,
+      "name": "Jossu",
+      "isHome": false
+    },
+    {
+      "id": 3,
+      "name": "Papu",
+      "isHome": false
+    },
+    {
+      "id": 4,
+      "name": "Cosmo",
+      "isHome": false
+    },
+    {
+      "id": 5,
+      "name": "Pepi",
+      "isHome": false
+    },
+    {
+      "id": 6,
+      "name": "Pauli",
+      "isHome": false
+    },
+    {
+      "id": 7,
+      "name": "Tomi",
+      "isHome": false
+    },
+    {
+      "id": 8,
+      "name": "Yoshi",
+      "isHome": false
+    }
+  ],
+  "homeStats": {},
+  "nextId": 9,
+  "sessionStartTime": 1753362182391,
+  "lastUpdated": "2025-07-24T13:03:10.543Z"
+}

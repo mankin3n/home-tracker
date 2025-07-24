@@ -7,20 +7,27 @@ interface Person {
   id: number;
   name: string;
   isHome: boolean;
-}
-
-interface HistoryEntry {
-  timestamp: number;
-  isHome: boolean;
+  stats?: {
+    lastHome: number | null;
+    hoursHome72h: number;
+    hoursHomeCurrent: number;
+  };
 }
 
 interface ServerData {
   people: Person[];
-  homeHistory: Record<string, HistoryEntry[]>;
   nextId: number;
   sessionStartTime: number;
   lastUpdated: string;
 }
+
+const formatMilliseconds = (ms: number): string => {
+  if (ms < 0) ms = 0;
+  const totalMinutes = Math.floor(ms / (1000 * 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${minutes}m`;
+};
 
 const HomeTracker: React.FC = () => {
   // Initialize logging
@@ -33,7 +40,6 @@ const HomeTracker: React.FC = () => {
   const [currentView, setCurrentView] = useState<'home' | 'edit' | 'analytics'>('home');
   const [people, setPeople] = useState<Person[]>([]);
   const [newPersonName, setNewPersonName] = useState<string>('');
-  const [homeHistory, setHomeHistory] = useState<Record<string, HistoryEntry[]>>({});
   const [sessionStartTime, setSessionStartTime] = useState<number>(Date.now());
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +76,6 @@ const HomeTracker: React.FC = () => {
       const data: ServerData = await apiCall('/api/data');
       
       setPeople(data.people);
-      setHomeHistory(data.homeHistory);
       setSessionStartTime(data.sessionStartTime);
       
       console.log('📤 Loaded data from server:', data.people.length, 'people');
@@ -95,8 +100,17 @@ const HomeTracker: React.FC = () => {
     
     socketRef.current.on('dataUpdate', (serverData: ServerData) => {
       console.log('📡 Received real-time data update');
+      console.log('🔍 Server data structure:', serverData);
+      console.log('🔍 People data:', serverData.people);
+      if (serverData.people) {
+        serverData.people.forEach((person, idx) => {
+          console.log(`🔍 Person[${idx}]:`, person);
+          if (!person.stats) {
+            console.warn(`⚠️ Person ${person.name} missing stats:`, person);
+          }
+        });
+      }
       setPeople(serverData.people);
-      setHomeHistory(serverData.homeHistory);
       setSessionStartTime(serverData.sessionStartTime);
       setLoading(false);
     });
@@ -120,29 +134,7 @@ const HomeTracker: React.FC = () => {
     };
   }, []);
 
-  // Calculate actual hours spent at home since session start
-  const calculateHomeHours = (personName: string): number => {
-    const history = homeHistory[personName] || [];
-    if (history.length === 0) return 0;
-    
-    let totalHomeTime = 0;
-    const now = Date.now();
-    
-    for (let i = 0; i < history.length; i++) {
-      const entry = history[i];
-      const nextEntry = history[i + 1];
-      
-      if (entry.isHome) {
-        const endTime = nextEntry ? nextEntry.timestamp : now;
-        const duration = Math.max(0, endTime - Math.max(entry.timestamp, sessionStartTime));
-        totalHomeTime += duration;
-      }
-    }
-    
-    // Convert milliseconds to hours and cap at 72 for display
-    const hours = Math.min(Math.round(totalHomeTime / (1000 * 60 * 60) * 10) / 10, 72);
-    return hours;
-  };
+  // Remove all homeHistory and calculateHomeHours logic
 
   const togglePersonStatus = async (personId: number): Promise<void> => {
     const person = people.find(p => p.id === personId);
@@ -217,8 +209,8 @@ const HomeTracker: React.FC = () => {
   const getAnalyticsData = () => {
     return people.map(person => ({
       person: person.name,
-      hoursHome: calculateHomeHours(person.name),
-      fullMark: 72
+      hoursHome: person.stats?.hoursHome72h || 0,
+      fullMark: 72 * 60 * 60 * 1000
     }));
   };
 
@@ -263,6 +255,7 @@ const HomeTracker: React.FC = () => {
     );
   }
 
+
   if (currentView === 'home') {
     return (
       <div className="min-h-screen bg-gradient-to-br p-6">
@@ -270,91 +263,54 @@ const HomeTracker: React.FC = () => {
           <div className="text-center mb-8">
             <div className="flex justify-between items-center mb-4">
               <div></div>
-              <h1 className="text-3xl font-light text-gray-800">Who's Home?</h1>
               <div className="flex space-x-2">
-                <button
-                  onClick={() => handleViewChange('analytics')}
-                  className="p-2 text-gray-500 hover:text-green-600 transition-colors"
-                >
+                <button onClick={() => handleViewChange('analytics')} className="p-2 text-gray-500 hover:text-green-600 transition-colors">
                   <BarChart3 size={24} />
                 </button>
-                <button
-                  onClick={() => handleViewChange('edit')}
-                  className="p-2 text-gray-500 hover:text-green-600 transition-colors"
-                >
+                <button onClick={() => handleViewChange('edit')} className="p-2 text-gray-500 hover:text-green-600 transition-colors">
                   <Edit3 size={24} />
                 </button>
               </div>
             </div>
             <div className="bg-white rounded-full px-6 py-2 shadow-sm border border-gray-100">
               <span className="text-lg font-medium text-gray-600">
-                {homeCount} {homeCount === 1 ? 'person' : 'people'} home
+                {people.filter(p => p.isHome).length} {people.filter(p => p.isHome).length === 1 ? 'person' : 'people'} home
               </span>
             </div>
           </div>
-
           <div className="space-y-3">
             {people
               .sort((a, b) => (b.isHome ? 1 : 0) - (a.isHome ? 1 : 0))
               .map((person) => (
-                <div
-                  key={person.id}
-                  className={`bg-white rounded-2xl p-5 shadow-sm border transition-all duration-300 ${
-                    person.isHome 
-                      ? 'border-green-200 bg-gradient-to-r from-green-50 to-white' 
-                      : 'border-gray-100 hover:border-gray-200'
-                  }`}
-                >
+                <div key={person.id} className={`bg-white rounded-2xl p-5 shadow-sm border transition-all duration-300 ${person.isHome ? 'border-green-200 bg-gradient-to-r from-green-50 to-white' : 'border-gray-100 hover:border-gray-200'}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
-                      <div className={`w-3 h-3 rounded-full transition-colors duration-300 ${
-                        person.isHome ? 'bg-green-400' : 'bg-gray-300'
-                      }`}></div>
+                      <div className={`w-3 h-3 rounded-full transition-colors duration-300 ${person.isHome ? 'bg-green-400' : 'bg-gray-300'}`}></div>
                       <div className="flex flex-col">
-                        <span className={`text-lg font-medium transition-colors duration-300 ${
-                          person.isHome ? 'text-green-800' : 'text-gray-700'
-                        }`}>
-                          {person.name}
+                        <span className={`text-lg font-medium transition-colors duration-300 ${person.isHome ? 'text-green-800' : 'text-gray-700'}`}>{person.name}</span>
+                        <span className="text-xs text-gray-500">
+                          Last home: {person.stats?.lastHome ? new Date(person.stats.lastHome).toLocaleString() : 'Never'}
                         </span>
                         <span className="text-xs text-gray-500">
-                          {calculateHomeHours(person.name)}h at home in this session
+                          72h: {formatMilliseconds(person.stats?.hoursHome72h || 0)}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          Since last home: {formatMilliseconds(person.stats?.hoursHomeCurrent || 0)}
                         </span>
                       </div>
                     </div>
-                    
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        togglePersonStatus(person.id);
-                      }}
-                      className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-green-300 focus:ring-offset-2 ${
-                        person.isHome ? 'bg-green-400' : 'bg-gray-300'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-all duration-300 ${
-                          person.isHome ? 'translate-x-7' : 'translate-x-1'
-                        }`}
-                      />
+                    <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); togglePersonStatus(person.id); }} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-green-300 focus:ring-offset-2 ${person.isHome ? 'bg-green-400' : 'bg-gray-300'}`}>
+                      <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-all duration-300 ${person.isHome ? 'translate-x-7' : 'translate-x-1'}`} />
                     </button>
                   </div>
-                  
                   <div className="mt-2 ml-7">
-                    <span className={`text-sm font-medium ${
-                      person.isHome ? 'text-green-600' : 'text-gray-500'
-                    }`}>
-                      {person.isHome ? 'At home' : 'Away'}
-                    </span>
+                    <span className={`text-sm font-medium ${person.isHome ? 'text-green-600' : 'text-gray-500'}`}>{person.isHome ? 'At home' : 'Away'}</span>
                   </div>
                 </div>
               ))}
           </div>
-
           <div className="mt-8 text-center">
-            <p className="text-gray-400 text-sm">
-              Tap the switches to update who's home • Real-time sync across all devices
-            </p>
+            <p className="text-gray-400 text-sm">Tap the switches to update who's home • Real-time sync across all devices</p>
           </div>
         </div>
       </div>
@@ -423,7 +379,7 @@ const HomeTracker: React.FC = () => {
                         {person.name}
                       </span>
                       <span className="text-xs text-gray-500">
-                        {calculateHomeHours(person.name)}h tracked
+                        {person.stats?.hoursHome72h ? (Math.round(person.stats.hoursHome72h / (1000 * 60 * 60) * 10) / 10) : 0}h tracked
                       </span>
                     </div>
                   </div>
@@ -507,13 +463,13 @@ const HomeTracker: React.FC = () => {
               ).person : 'N/A'}
             </p>
             <p className="text-sm text-gray-500">
-              {analyticsData.length > 0 ? Math.max(...analyticsData.map(p => p.hoursHome)) : 0} hours
+              {analyticsData.length > 0 ? formatMilliseconds(Math.max(...analyticsData.map(p => p.hoursHome))) : '0h 0m'}
             </p>
           </div>
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-600 mb-2">Average Time</h3>
             <p className="text-2xl font-light text-gray-800">
-              {analyticsData.length > 0 ? Math.round(analyticsData.reduce((sum, p) => sum + p.hoursHome, 0) / analyticsData.length * 10) / 10 : 0}h
+              {analyticsData.length > 0 ? formatMilliseconds(analyticsData.reduce((sum, p) => sum + p.hoursHome, 0) / analyticsData.length) : '0h 0m'}
             </p>
             <p className="text-sm text-gray-500">per person</p>
           </div>
