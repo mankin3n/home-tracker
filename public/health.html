@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Home Tracker - Health Check</title>
+    <meta charset="utf-8">
+</head>
+<body>
+    <h1>Home Tracker is Running! ✅</h1>
+    <p>App Status: Healthy</p>
+    <p>Timestamp: <span id="timestamp"></span></p>
+    <script>
+        document.getElementById('timestamp').textContent = new Date().toISOString();
+        console.log('🏥 Health check page loaded at:', new Date().toISOString());
+    </script>
+</body>
+</html>
